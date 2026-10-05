@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phần Mềm Lập Hóa Đơn Giá Trị Gia Tăng Điện Tử</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SheetJS cho Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- html2pdf cho PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- html-docx-js cho Word -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.3.1/html-docx.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #invoice-print-area, #invoice-print-area * {
+                visibility: visible;
+            }
+            #invoice-print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 10px;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            /* Cấu hình lặp lại tiêu đề bảng khi sang trang ở mọi trang in */
+            thead {
+                display: table-header-group !important;
+            }
+            tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
+        /* Đảm bảo table header luôn lặp lại khi sang trang */
+        thead {
+            display: table-header-group;
+        }
+        /* Khung viền hoa văn hóa đơn điện tử chuẩn */
+        .invoice-border-frame {
+            border: 8px solid;
+            border-image: repeating-linear-gradient(-45deg, #15803d, #15803d 10px, #f8fafc 10px, #f8fafc 20px) 10;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white shadow-md no-print">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-lg shadow">
+                    <i class="fa-solid fa-file-invoice-dollar text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wide">HÓA ĐƠN ĐIỆN TỬ GTGT</h1>
+                    <p class="text-xs text-slate-400">Chuẩn Nghị định 123/2020/NĐ-CP & Thông tư 78/2021/TT-BTC</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 mt-2 sm:mt-0">
+                <button onclick="switchTab('form')" id="btn-tab-form" class="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white transition shadow">
+                    <i class="fa-solid fa-pen-to-square mr-2"></i> Nhập liệu
+                </button>
+                <button onclick="switchTab('preview')" id="btn-tab-preview" class="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition shadow">
+                    <i class="fa-solid fa-eye mr-2"></i> Xem Hóa Đơn & Xuất File
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6 grid grid-cols-1 gap-6">
+
+        <!-- TAB 1: FORM NHẬP LIỆU -->
+        <div id="tab-form" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Cột trái: Thông tin chung & Bên bán/mua -->
+                <div class="lg:col-span-1 space-y-6">
+                    
+                    <!-- Thông tin Hóa đơn -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <h2 class="text-base font-semibold text-slate-800 mb-4 flex items-center border-b pb-2">
+                            <i class="fa-solid fa-circle-info text-indigo-600 mr-2"></i> Thông Tin Hóa Đơn
+                        </h2>
+                        <div class="space-y-3 text-sm">
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Mẫu số / Ký hiệu (Serial No)</label>
+                                <input type="text" id="inv-serial" value="1C24TTC" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Số hóa đơn (No.)</label>
+                                    <input type="text" id="inv-number" value="43" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Ngày lập</label>
+                                    <input type="date" id="inv-date" value="2024-05-15" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Mã của cơ quan thuế</label>
+                                <input type="text" id="inv-tax-code-auth" value="00B8F4390541D24E00BA68F031A3A5C166" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Mã tra cứu</label>
+                                    <input type="text" id="inv-lookup-code" value="FB742153" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Loại Tiền tệ</label>
+                                    <select id="inv-currency" onchange="updateCalculations()" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                        <option value="USD" selected>USD ($)</option>
+                                        <option value="VND">VND (₫)</option>
+                                        <option value="EUR">EUR (€)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Thông tin Bên Bán -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <h2 class="text-base font-semibold text-slate-800 mb-4 flex items-center border-b pb-2">
+                            <i class="fa-solid fa-store text-indigo-600 mr-2"></i> Đơn Vị Bán Hàng (Seller)
+                        </h2>
+                        <div class="space-y-3 text-sm">
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Tên công ty bán</label>
+                                <input type="text" id="seller-name" value="CÔNG TY TNHH DỊCH VỤ MAY MẶC THỜI TRANG TC-VIỆT NAM" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Mã số thuế (Tax code)</label>
+                                <input type="text" id="seller-tax" value="0317964853" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Địa chỉ (Address)</label>
+                                <textarea id="seller-address" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">21/28 đường số 10, Khu Phố 3, Phường Bình Thuận, Quận 7, Thành phố Hồ Chí Minh, Việt Nam</textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Điện thoại</label>
+                                    <input type="text" id="seller-tel" value="0909500126" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Fax</label>
+                                    <input type="text" id="seller-fax" value="" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Email</label>
+                                    <input type="text" id="seller-email" value="" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Website</label>
+                                    <input type="text" id="seller-website" value="" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Số tài khoản</label>
+                                <input type="text" id="seller-bank" value="123456789 - ACB" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Thông tin Bên Mua -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <h2 class="text-base font-semibold text-slate-800 mb-4 flex items-center border-b pb-2">
+                            <i class="fa-solid fa-user-tie text-indigo-600 mr-2"></i> Đơn Vị Mua Hàng (Buyer)
+                        </h2>
+                        <div class="space-y-3 text-sm">
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Họ tên người mua hàng</label>
+                                <input type="text" id="buyer-name" value="Nguyễn Văn A" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Tên đơn vị mua</label>
+                                <input type="text" id="buyer-company" value="AZAZIE HONG KONG LIMITED" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Địa chỉ</label>
+                                <textarea id="buyer-address" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">FLAT 08, 19F, TRENDY CENTRE, 682 CASTLE PEAK ROAD, LAI CHI KOK, KOWLOON, HK</textarea>
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Mã số thuế bên mua</label>
+                                <input type="text" id="buyer-tax" value="" placeholder="Để trống nếu là khách nước ngoài/lẻ" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block font-medium text-slate-600 mb-1">Hình thức thanh toán</label>
+                                <input type="text" id="inv-payment-method" value="Chuyển khoản" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Số tài khoản</label>
+                                    <input type="text" id="buyer-bank" value="" placeholder="Tài khoản bên mua" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-slate-600 mb-1">Tại (At)</label>
+                                    <input type="text" id="buyer-bank-at" value="" placeholder="Ngân hàng mở tài khoản" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Cột phải: Bảng Danh Sách Hàng Hóa Dịch Vụ & Thuế Suất -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex flex-wrap justify-between items-center mb-4 border-b pb-2">
+                            <h2 class="text-base font-semibold text-slate-800 flex items-center">
+                                <i class="fa-solid fa-list-check text-indigo-600 mr-2"></i> Danh Sách Hàng Hóa, Dịch Vụ
+                            </h2>
+                            <div class="flex space-x-2">
+                                <button onclick="addRow()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition flex items-center shadow-sm">
+                                    <i class="fa-solid fa-plus mr-1"></i> Thêm dòng
+                                </button>
+                                <button onclick="loadSampleData()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs px-3 py-1.5 rounded-lg font-medium transition border border-indigo-200">
+                                    <i class="fa-solid fa-rotate mr-1"></i> Nạp mẫu chuẩn
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Cài đặt Thuế Suất chung -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-medium text-slate-700"><i class="fa-solid fa-percent text-indigo-600 mr-1"></i> Thuế suất GTGT chung:</span>
+                                <select id="inv-vat-rate" onchange="updateCalculations()" class="border border-slate-300 rounded-lg px-3 py-1.5 bg-white font-semibold text-indigo-700 focus:ring-2 focus:ring-indigo-500">
+                                    <option value="0" selected>0%</option>
+                                    <option value="5">5%</option>
+                                    <option value="8">8%</option>
+                                    <option value="10">10%</option>
+                                    <option value="KCT">KCT (Không chịu thuế)</option>
+                                    <option value="KKKNT">KKKNT (Không kê khai nộp thuế)</option>
+                                </select>
+                            </div>
+                            <div class="text-xs text-slate-500 italic">
+                                * Thành tiền & Tổng tiền tự động tính toán chính xác theo dữ liệu bên dưới.
+                            </div>
+                        </div>
+
+                        <!-- Bảng nhập liệu động -->
+                        <div class="overflow-x-auto border border-slate-200 rounded-lg">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead class="bg-slate-100 text-slate-700 uppercase font-semibold">
+                                    <tr>
+                                        <th class="p-2.5 text-center w-12">STT</th>
+                                        <th class="p-2.5">Mã / Tên Hàng Hóa, Dịch Vụ</th>
+                                        <th class="p-2.5 w-24">ĐVT</th>
+                                        <th class="p-2.5 w-20 text-right">Số lượng</th>
+                                        <th class="p-2.5 w-28 text-right">Đơn giá</th>
+                                        <th class="p-2.5 w-28 text-right">Thành tiền</th>
+                                        <th class="p-2.5 text-center w-12">Xóa</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="item-table-body" class="divide-y divide-slate-200">
+                                    <!-- Dynamic rows injected via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Tóm tắt tổng tiền thanh toán ngay trong form -->
+                        <div class="mt-4 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-slate-600 font-medium">Cộng tiền hàng (Total amount):</span>
+                                <span id="form-total-goods" class="font-bold text-slate-800">0.00</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600 font-medium">Tiền thuế GTGT (<span id="form-vat-label">0%</span>):</span>
+                                <span id="form-total-vat" class="font-bold text-slate-800">0.00</span>
+                            </div>
+                            <div class="flex justify-between border-t border-slate-300 pt-2 text-base">
+                                <span class="text-indigo-900 font-bold">Tổng cộng thanh toán (Total payment):</span>
+                                <span id="form-grand-total" class="font-extrabold text-indigo-600">0.00</span>
+                            </div>
+                            <div class="pt-1 text-xs text-slate-500 italic">
+                                <span class="font-semibold text-slate-700">Viết bằng chữ:</span> <span id="form-amount-in-words" class="text-slate-800 font-medium">-</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-end">
+                            <button onclick="switchTab('preview')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl shadow transition flex items-center text-sm">
+                                <i class="fa-solid fa-arrow-right mr-2"></i> Xem & Xuất Hóa Đơn Hoàn Chỉnh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB 2: XEM TRƯỚC HÓA ĐƠN VÀ XUẤT FILE -->
+        <div id="tab-preview" class="space-y-6 hidden">
+            
+            <!-- Thanh công cụ hành động -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4 no-print">
+                <div class="flex items-center space-x-2">
+                    <button onclick="switchTab('form')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg font-medium transition">
+                        <i class="fa-solid fa-arrow-left mr-1"></i> Quay lại chỉnh sửa
+                    </button>
+                    <span class="text-sm text-slate-500 hidden sm:inline">| Bản hiển thị chuẩn theo Nghị định 123/2020/NĐ-CP</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="exportToPDF()" class="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-file-pdf mr-2"></i> Tải file PDF
+                    </button>
+                    <button onclick="exportToWord()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-file-word mr-2"></i> Xuất file Word
+                    </button>
+                    <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-file-excel mr-2"></i> Xuất file Excel
+                    </button>
+                    <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-print mr-2"></i> In hóa đơn
+                    </button>
+                </div>
+            </div>
+
+            <!-- VÙNG HIỂN THỊ HÓA ĐƠN ĐỂ XUẤT PDF / IN ẤN (Đúng chuẩn form mẫu cung cấp) -->
+            <div class="flex justify-center">
+                <div id="invoice-print-area" class="bg-white w-full max-w-[210mm] p-6 sm:p-10 shadow-xl rounded-xl invoice-border-frame text-slate-900 relative text-xs sm:text-sm font-['Inter']">
+                    
+                    <!-- Tiêu đề chính hóa đơn -->
+                    <div class="text-center mb-4">
+                        <h1 class="font-bold text-base sm:text-lg text-rose-600 uppercase">HÓA ĐƠN GIÁ TRỊ GIA TĂNG</h1>
+                        <p class="text-xs italic text-slate-700">(VAT INVOICE)</p>
+                        <p class="text-xs italic text-slate-700">(Bản thể hiện của hóa đơn điện tử)</p>
+                        <p class="text-xs italic text-slate-700">(Electronic invoice display)</p>
+                        <p class="text-xs font-medium mt-1">Ngày (date) <span id="prev-day">15</span> tháng (month) <span id="prev-month">05</span> năm (year) <span id="prev-year">2024</span></p>
+                        <p class="text-xs font-semibold text-slate-800 mt-0.5">Mã của cơ quan thuế: <span id="prev-tax-auth" class="font-mono text-[11px] text-indigo-700">00B8F4390541D24E00BA68F031A3A5C166</span></p>
+                    </div>
+
+                    <!-- Serial và Số hóa đơn góc phải trên cùng -->
+                    <div class="flex justify-end text-right mb-2">
+                        <div class="space-y-0.5 text-xs">
+                            <p class="font-bold">Ký hiệu (Serial No): <span id="prev-serial" class="font-bold text-indigo-900">1C24TTC</span></p>
+                            <p class="font-bold">Số (No.): <span id="prev-number" class="font-bold text-rose-600 text-base">43</span></p>
+                        </div>
+                    </div>
+
+                    <div class="border-t-2 border-slate-800 pt-3 mb-3"></div>
+
+                    <!-- Phần Đơn vị bán hàng và Mã QR Code -->
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="space-y-1 pr-4">
+                            <p class="text-xs"><span class="font-semibold text-slate-700">Đơn vị bán hàng (Seller):</span> <span id="prev-seller-name" class="font-bold text-slate-900 uppercase">CÔNG TY TNHH DỊCH VỤ MAY MẶC THỜI TRANG TC-VIỆT NAM</span></p>
+                            <p class="text-xs"><span class="font-semibold text-slate-700">Mã số thuế (Tax code):</span> <span id="prev-seller-tax" class="font-bold">0317964853</span></p>
+                            <p class="text-xs"><span class="font-semibold text-slate-700">Địa chỉ (Address):</span> <span id="prev-seller-address">21/28 đường số 10, Khu Phố 3, Phường Bình Thuận, Quận 7, Thành phố Hồ Chí Minh, Việt Nam</span></p>
+                            <div class="grid grid-cols-2 gap-4 text-xs">
+                                <p><span class="font-semibold text-slate-700">Điện thoại (Tel):</span> <span id="prev-seller-tel">0909500126</span></p>
+                                <p><span class="font-semibold text-slate-700">Email:</span> <span id="prev-seller-email">-</span></p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 text-xs">
+                                <p><span class="font-semibold text-slate-700">Fax:</span> <span id="prev-seller-fax">-</span></p>
+                                <p><span class="font-semibold text-slate-700">Website:</span> <span id="prev-seller-website">-</span></p>
+                            </div>
+                            <p class="text-xs"><span class="font-semibold text-slate-700">Số tài khoản (A/C No):</span> <span id="prev-seller-bank">123456789 - ACB</span></p>
+                        </div>
+                        <div class="flex-shrink-0 text-center">
+                            <!-- Khung chứa mã QR hóa đơn -->
+                            <div class="w-24 h-24 sm:w-28 sm:h-28 border border-slate-300 p-1 bg-white shadow-sm flex items-center justify-center">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=FB742153" alt="Mã QR tra cứu hóa đơn" id="prev-qr-code" class="w-full h-full object-contain">
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Mã tra cứu QR</span>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-300 my-2"></div>
+
+                    <!-- Thông tin Người Mua -->
+                    <div class="space-y-1.5 text-xs mb-4">
+                        <div>
+                            <span class="font-semibold text-slate-700">Họ tên người mua hàng (Buyer's fullname):</span> <span id="prev-buyer-name" class="font-medium">Nguyễn Văn A</span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-slate-700">Tên đơn vị (Company's name):</span> <span id="prev-buyer-company" class="font-bold text-slate-900 uppercase">AZAZIE HONG KONG LIMITED</span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-slate-700">Địa chỉ (Address):</span> <span id="prev-buyer-address">FLAT 08, 19F, TRENDY CENTRE, 682 CASTLE PEAK ROAD, LAI CHI KOK, KOWLOON, HK</span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-slate-700">Mã số thuế (Tax code):</span> <span id="prev-buyer-tax">-</span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-slate-700">Hình thức thanh toán (Payment method):</span> <span id="prev-payment-method">Chuyển khoản</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <span class="font-semibold text-slate-700">Số tài khoản (A/C No):</span> <span id="prev-buyer-bank">-</span>
+                            </div>
+                            <div>
+                                <span class="font-semibold text-slate-700">Tại (At):</span> <span id="prev-buyer-bank-at">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bảng Chi Tiết Hàng Hóa (Đã cấu hình tự động lặp lại thead khi sang trang in) -->
+                    <div class="mb-4">
+                        <table class="w-full border-collapse border border-slate-300 text-xs">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-800 font-bold text-center">
+                                    <th class="border border-slate-300 p-2 w-10">STT<br><span class="font-normal text-[10px]">(No.)</span></th>
+                                    <th class="border border-slate-300 p-2">Tên hàng hóa, dịch vụ<br><span class="font-normal text-[10px]">(Description)</span></th>
+                                    <th class="border border-slate-300 p-2 w-16">Đơn vị tính<br><span class="font-normal text-[10px]">(Unit)</span></th>
+                                    <th class="border border-slate-300 p-2 w-16">Số lượng<br><span class="font-normal text-[10px]">(Quantity)</span></th>
+                                    <th class="border border-slate-300 p-2 w-24">Đơn giá<br><span class="font-normal text-[10px]">(Unit price)</span></th>
+                                    <th class="border border-slate-300 p-2 w-28">Thành tiền<br><span class="font-normal text-[10px]">(Amount)</span></th>
+                                </tr>
+                                <tr class="bg-slate-50 text-[10px] text-slate-500 text-center font-mono">
+                                    <th class="border border-slate-300 p-1">(1)</th>
+                                    <th class="border border-slate-300 p-1">(2)</th>
+                                    <th class="border border-slate-300 p-1">(3)</th>
+                                    <th class="border border-slate-300 p-1">(4)</th>
+                                    <th class="border border-slate-300 p-1">(5)</th>
+                                    <th class="border border-slate-300 p-1">(6)=(4)x(5)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoice-preview-items" class="divide-y divide-slate-200">
+                                <!-- Dữ liệu xem trước -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Tổng kết tiền và thuế -->
+                    <div class="space-y-2 text-xs mb-6 border-t border-b border-slate-300 py-3">
+                        <div class="flex justify-between">
+                            <span class="font-semibold text-slate-700">Cộng tiền hàng (Total amount):</span>
+                            <span id="prev-total-goods" class="font-bold">0.00</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-slate-700">Thuế suất GTGT (VAT rate): <span id="prev-vat-rate-label" class="text-indigo-600 font-bold">0%</span></span>
+                            <span>Tiền thuế GTGT (VAT amount): <span id="prev-total-vat" class="font-bold">0.00</span></span>
+                        </div>
+                        <div class="flex justify-between text-sm pt-2 border-t border-slate-200">
+                            <span class="font-bold text-slate-900">Tổng cộng tiền thanh toán (Total payment):</span>
+                            <span id="prev-grand-total" class="font-extrabold text-indigo-700 text-base">0.00</span>
+                        </div>
+                        <div class="pt-1 text-slate-700">
+                            <span class="font-semibold">Số tiền viết bằng chữ (In words):</span> <span id="prev-amount-in-words" class="font-medium italic text-indigo-900">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Chữ ký và Tra cứu -->
+                    <div class="grid grid-cols-2 gap-8 pt-2 text-center text-xs">
+                        <div>
+                            <p class="font-bold uppercase text-slate-800">Người mua hàng (Buyer)</p>
+                            <p class="italic text-slate-500 text-[11px]">(Ký, ghi rõ họ tên / Sign, Fullname)</p>
+                            <div class="h-16"></div>
+                        </div>
+                        <div>
+                            <p class="font-bold uppercase text-slate-800">Người bán hàng (Seller)</p>
+                            <p class="italic text-slate-500 text-[11px]">(Ký, đóng dấu, ghi rõ họ tên / Sign, Stamp, Fullname)</p>
+                            <div class="mt-1 text-[11px] text-emerald-700 font-mono bg-emerald-50 p-2 rounded border border-emerald-200 inline-block text-left">
+                                <p class="font-bold"><i class="fa-solid fa-certificate mr-1"></i> Signature Valid</p>
+                                <p>Ký bởi: <span id="prev-sign-seller">CÔNG TY TNHH DỊCH VỤ MAY MẶC THỜI TRANG TC-VIỆT NAM</span></p>
+                                <p>Ngày ký: <span id="prev-sign-date">15/05/2024</span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer tra cứu hóa đơn -->
+                    <div class="mt-8 pt-3 border-t border-slate-200 text-center text-[11px] text-slate-500 space-y-1">
+                        <p>Tra cứu hóa đơn tại website: <span id="prev-website" class="text-indigo-600 font-medium">https://tracuuhoadon.minvoice.com.vn/</span> - Mã tra cứu: <span id="prev-lookup-code-display" class="font-bold text-slate-700">FB742153</span></p>
+                        <p class="text-[10px] text-slate-400">(Khởi tạo từ Phần mềm Hóa đơn Điện tử TC-INVOICE - Hotline: 0909500126)</p>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        let items = [];
+
+        function loadSampleData() {
+            const sampleList = [
+                { name: "304290", unit: "Cái", qty: 1, price: 15.59 },
+                { name: "301137", unit: "Cái", qty: 1, price: 16.21 },
+                { name: "357218", unit: "Cái", qty: 3, price: 14.62 },
+                { name: "304280", unit: "Cái", qty: 2, price: 16.36 },
+                { name: "119060", unit: "Cái", qty: 1, price: 17.48 },
+                { name: "301185", unit: "Cái", qty: 1, price: 16.78 },
+                { name: "301172", unit: "Cái", qty: 3, price: 12.84 },
+                { name: "198886", unit: "Cái", qty: 2, price: 12.89 },
+                { name: "347811", unit: "Cái", qty: 9, price: 17.07 },
+                { name: "219703", unit: "Cái", qty: 1, price: 14.04 },
+                { name: "304330", unit: "Cái", qty: 1, price: 10.67 },
+                { name: "353733", unit: "Cái", qty: 2, price: 15.566 },
+                { name: "331653", unit: "Cái", qty: 1, price: 15.04 },
+                { name: "353758", unit: "Cái", qty: 3, price: 24.23 },
+                { name: "219690", unit: "Cái", qty: 1, price: 16.18 },
+                { name: "357227", unit: "Cái", qty: 4, price: 16.259 },
+                { name: "347807", unit: "Cái", qty: 2, price: 19.91 },
+                { name: "349436", unit: "Cái", qty: 2, price: 16.32 },
+                { name: "119053", unit: "Cái", qty: 1, price: 17.29 },
+                { name: "74010", unit: "Cái", qty: 1, price: 20.08 },
+                { name: "301179", unit: "Cái", qty: 1, price: 16.25 },
+                { name: "331656", unit: "Cái", qty: 2, price: 15.59 },
+                { name: "119062", unit: "Cái", qty: 1, price: 16.13 },
+                { name: "198867", unit: "Cái", qty: 2, price: 12.604 },
+                { name: "357272", unit: "Cái", qty: 4, price: 15.566 },
+                { name: "331615", unit: "Cái", qty: 1, price: 16.18 },
+                { name: "331562", unit: "Cái", qty: 2, price: 15.47 },
+                { name: "156103", unit: "Cái", qty: 1, price: 13.13 },
+                { name: "349538", unit: "Cái", qty: 1, price: 18.27 },
+                { name: "353794", unit: "Cái", qty: 1, price: 18.73 },
+                { name: "331618", unit: "Cái", qty: 1, price: 17.25 },
+                { name: "225935", unit: "Cái", qty: 1, price: 13.52 },
+                { name: "353758", unit: "Cái", qty: 1, price: 24.23 },
+                { name: "304280", unit: "Cái", qty: 1, price: 16.36 },
+                { name: "349483", unit: "Cái", qty: 1, price: 16.03 },
+                { name: "347811", unit: "Cái", qty: 1, price: 17.07 },
+                { name: "353733", unit: "Cái", qty: 1, price: 15.566 }
+            ];
+            items = sampleList;
+            document.getElementById('inv-vat-rate').value = "0";
+            renderTable();
+            updateCalculations();
+        }
+
+        function switchTab(tabName) {
+            const formTab = document.getElementById('tab-form');
+            const previewTab = document.getElementById('tab-preview');
+            const btnForm = document.getElementById('btn-tab-form');
+            const btnPreview = document.getElementById('btn-tab-preview');
+
+            if (tabName === 'form') {
+                formTab.classList.remove('hidden');
+                previewTab.classList.add('hidden');
+                btnForm.className = "px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white transition shadow";
+                btnPreview.className = "px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition shadow";
+            } else {
+                formTab.classList.add('hidden');
+                previewTab.classList.remove('hidden');
+                btnPreview.className = "px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white transition shadow";
+                btnForm.className = "px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition shadow";
+                updatePreviewContent();
+            }
+        }
+
+        function addRow() {
+            items.push({ name: "", unit: "Cái", qty: 1, price: 0 });
+            renderTable();
+            updateCalculations();
+        }
+
+        function removeRow(index) {
+            items.splice(index, 1);
+            renderTable();
+            updateCalculations();
+        }
+
+        function updateItem(index, field, value) {
+            if (field === 'qty' || field === 'price') {
+                items[index][field] = parseFloat(value) || 0;
+            } else {
+                items[index][field] = value;
+            }
+            updateCalculations();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('item-table-body');
+            tbody.innerHTML = "";
+            items.forEach((item, index) => {
+                const amount = item.qty * item.price;
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="p-2 text-center font-medium text-slate-600">${index + 1}</td>
+                    <td class="p-2"><input type="text" value="${item.name}" oninput="updateItem(${index}, 'name', this.value)" class="w-full border border-slate-300 rounded px-2 py-1 focus:ring-1 focus:ring-indigo-500"></td>
+                    <td class="p-2"><input type="text" value="${item.unit}" oninput="updateItem(${index}, 'unit', this.value)" class="w-full border border-slate-300 rounded px-2 py-1 focus:ring-1 focus:ring-indigo-500 text-center"></td>
+                    <td class="p-2"><input type="number" step="any" value="${item.qty}" oninput="updateItem(${index}, 'qty', this.value)" class="w-full border border-slate-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-indigo-500"></td>
+                    <td class="p-2"><input type="number" step="any" value="${item.price}" oninput="updateItem(${index}, 'price', this.value)" class="w-full border border-slate-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-indigo-500"></td>
+                    <td class="p-2 text-right font-semibold text-slate-800">${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="p-2 text-center"><button onclick="removeRow(${index})" class="text-rose-600 hover:text-rose-800 p-1"><i class="fa-solid fa-trash-can"></i></button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateCalculations() {
+            let totalGoods = 0;
+            items.forEach(item => {
+                totalGoods += (item.qty || 0) * (item.price || 0);
+            });
+
+            const vatRateVal = document.getElementById('inv-vat-rate').value;
+            let vatAmount = 0;
+            let vatRateLabelStr = vatRateVal;
+
+            if (vatRateVal !== 'KCT' && vatRateVal !== 'KKKNT') {
+                const rateNum = parseFloat(vatRateVal) || 0;
+                vatAmount = totalGoods * (rateNum / 100);
+                vatRateLabelStr = vatRateVal + "%";
+            } else if (vatRateVal === 'KCT') {
+                vatRateLabelStr = "KCT (Không chịu thuế)";
+            } else if (vatRateVal === 'KKKNT') {
+                vatRateLabelStr = "KKKNT (Không kê khai nộp thuế)";
+            }
+
+            const grandTotal = totalGoods + vatAmount;
+            const currency = document.getElementById('inv-currency').value;
+
+            document.getElementById('form-total-goods').innerText = totalGoods.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + currency;
+            document.getElementById('form-vat-label').innerText = vatRateLabelStr;
+            document.getElementById('form-total-vat').innerText = vatAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + currency;
+            document.getElementById('form-grand-total').innerText = grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + currency;
+
+            const words = convertCurrencyToWords(grandTotal, currency);
+            document.getElementById('form-amount-in-words').innerText = words;
+        }
+
+        function convertCurrencyToWords(amount, currency) {
+            if (isNaN(amount) || amount === 0) return "Không đồng";
+            
+            if (currency === 'USD') {
+                const integerPart = Math.floor(amount);
+                const cents = Math.round((amount - integerPart) * 100);
+                let text = numberToVietnameseWords(integerPart) + " đô la Mỹ";
+                if (cents > 0) {
+                    text += " và " + numberToVietnameseWords(cents) + " xu";
+                }
+                return capitalizeFirstLetter(text);
+            } else if (currency === 'EUR') {
+                const integerPart = Math.floor(amount);
+                let text = numberToVietnameseWords(integerPart) + " Euro";
+                return capitalizeFirstLetter(text);
+            } else {
+                let text = numberToVietnameseWords(Math.round(amount)) + " đồng chẵn";
+                return capitalizeFirstLetter(text);
+            }
+        }
+
+        function numberToVietnameseWords(n) {
+            if (n === 0) return "không";
+            const units = ["", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+            const teens = ["mười", "mười một", "mười hai", "mười ba", "mười bốn", "mười lăm", "mười sáu", "mười bảy", "mười tám", "mười chín"];
+            
+            function convertLessThanOneThousand(num) {
+                let currentResult = "";
+                let tram = Math.floor(num / 100);
+                let chuc = Math.floor((num % 100) / 10);
+                let donvi = num % 10;
+
+                if (tram > 0) {
+                    currentResult += units[tram] + " trăm ";
+                    if (chuc === 0 && donvi > 0) currentResult += "lẻ ";
+                }
+                if (chuc > 1) {
+                    currentResult += units[chuc] + " mươi ";
+                    if (donvi === 1) currentResult += "mốt ";
+                    else if (donvi === 5) currentResult += "lăm ";
+                    else if (donvi > 0) currentResult += units[donvi] + " ";
+                } else if (chuc === 1) {
+                    currentResult += teens[donvi] + " ";
+                } else if (chuc === 0 && donvi > 0 && tram > 0) {
+                    currentResult += units[donvi] + " ";
+                } else if (chuc === 0 && donvi > 0 && tram === 0) {
+                    currentResult += units[donvi] + " ";
+                }
+                return currentResult.trim();
+            }
+
+            let billion = Math.floor(n / 1000000000);
+            let million = Math.floor((n % 1000000000) / 1000000);
+            let thousand = Math.floor((n % 1000000) / 1000);
+            let remainder = n % 1000;
+
+            let res = "";
+            if (billion > 0) res += convertLessThanOneThousand(billion) + " tỷ ";
+            if (million > 0) res += convertLessThanOneThousand(million) + " triệu ";
+            if (thousand > 0) res += convertLessThanOneThousand(thousand) + " nghìn ";
+            if (remainder > 0) res += convertLessThanOneThousand(remainder);
+            return res.trim();
+        }
+
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+
+        function updatePreviewContent() {
+            document.getElementById('prev-serial').innerText = document.getElementById('inv-serial').value;
+            document.getElementById('prev-number').innerText = document.getElementById('inv-number').value;
+            document.getElementById('prev-tax-auth').innerText = document.getElementById('inv-tax-code-auth').value;
+            const lookupCode = document.getElementById('inv-lookup-code').value;
+            document.getElementById('prev-lookup-code-display').innerText = lookupCode;
+            document.getElementById('prev-qr-code').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${lookupCode}`;
+            
+            const dateVal = document.getElementById('inv-date').value;
+            if (dateVal) {
+                const parts = dateVal.split('-');
+                document.getElementById('prev-year').innerText = parts[0];
+                document.getElementById('prev-month').innerText = parts[1];
+                document.getElementById('prev-day').innerText = parts[2];
+                document.getElementById('prev-sign-date').innerText = `${parts[2]}/${parts[1]}/${parts[0]} 04:00 PM`;
+            }
+
+            const sellerName = document.getElementById('seller-name').value;
+            document.getElementById('prev-seller-name').innerText = sellerName;
+            document.getElementById('prev-seller-tax').innerText = document.getElementById('seller-tax').value;
+            document.getElementById('prev-seller-address').innerText = document.getElementById('seller-address').value;
+            document.getElementById('prev-seller-tel').innerText = document.getElementById('seller-tel').value || "-";
+            document.getElementById('prev-seller-fax').innerText = document.getElementById('seller-fax').value || "-";
+            document.getElementById('prev-seller-email').innerText = document.getElementById('seller-email').value || "-";
+            document.getElementById('prev-seller-website').innerText = document.getElementById('seller-website').value || "-";
+            document.getElementById('prev-seller-bank').innerText = document.getElementById('seller-bank').value;
+            document.getElementById('prev-sign-seller').innerText = sellerName;
+
+            document.getElementById('prev-buyer-name').innerText = document.getElementById('buyer-name').value;
+            document.getElementById('prev-buyer-company').innerText = document.getElementById('buyer-company').value;
+            document.getElementById('prev-buyer-address').innerText = document.getElementById('buyer-address').value;
+            document.getElementById('prev-buyer-tax').innerText = document.getElementById('buyer-tax').value || "-";
+            document.getElementById('prev-payment-method').innerText = document.getElementById('inv-payment-method').value;
+            document.getElementById('prev-buyer-bank').innerText = document.getElementById('buyer-bank').value || "-";
+            document.getElementById('prev-buyer-bank-at').innerText = document.getElementById('buyer-bank-at').value || "-";
+
+            const previewTbody = document.getElementById('invoice-preview-items');
+            previewTbody.innerHTML = "";
+            let totalGoods = 0;
+            const currency = document.getElementById('inv-currency').value;
+
+            items.forEach((item, index) => {
+                const amount = (item.qty || 0) * (item.price || 0);
+                totalGoods += amount;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="border border-slate-300 p-2 text-center">${index + 1}</td>
+                    <td class="border border-slate-300 p-2">${item.name}</td>
+                    <td class="border border-slate-300 p-2 text-center">${item.unit}</td>
+                    <td class="border border-slate-300 p-2 text-right">${item.qty}</td>
+                    <td class="border border-slate-300 p-2 text-right">${item.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="border border-slate-300 p-2 text-right font-medium">${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                `;
+                previewTbody.appendChild(tr);
+            });
+
+            const vatRateVal = document.getElementById('inv-vat-rate').value;
+            let vatAmount = 0;
+            let vatRateLabelStr = vatRateVal;
+
+            if (vatRateVal !== 'KCT' && vatRateVal !== 'KKKNT') {
+                const rateNum = parseFloat(vatRateVal) || 0;
+                vatAmount = totalGoods * (rateNum / 100);
+                vatRateLabelStr = vatRateVal + "%";
+            } else if (vatRateVal === 'KCT') {
+                vatRateLabelStr = "KCT (Không chịu thuế)";
+            } else if (vatRateVal === 'KKKNT') {
+                vatRateLabelStr = "KKKNT (Không kê khai nộp thuế)";
+            }
+
+            const grandTotal = totalGoods + vatAmount;
+
+            document.getElementById('prev-total-goods').innerText = totalGoods.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + currency;
+            document.getElementById('prev-vat-rate-label').innerText = vatRateLabelStr;
+            document.getElementById('prev-total-vat').innerText = vatAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + currency;
+            document.getElementById('prev-grand-total').innerText = grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + currency;
+            document.getElementById('prev-amount-in-words').innerText = convertCurrencyToWords(grandTotal, currency);
+        }
+
+        function exportToPDF() {
+            updatePreviewContent();
+            const element = document.getElementById('invoice-print-area');
+            const opt = {
+                margin:       5,
+                filename:     `HoaDon_${document.getElementById('inv-number').value}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            html2pdf().from(element).set(opt).save();
+        }
+
+        function exportToWord() {
+            updatePreviewContent();
+            const contentHTML = document.getElementById('invoice-print-area').innerHTML;
+            const htmlHeader = `<!DOCTYPE html><html><head><meta charset='utf-8'><title>Hóa đơn</title><style>body{font-family:'Times New Roman',serif;font-size:12pt;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #000;padding:5px;}</style></head><body>`;
+            const htmlFooter = `</body></html>`;
+            const completeHTML = htmlHeader + contentHTML + htmlFooter;
+            
+            const converted = htmlDocx.asBlob(completeHTML);
+            saveAs(converted, `HoaDon_${document.getElementById('inv-number').value}.docx`);
+        }
+
+        function exportToExcel() {
+            let wb = XLSX.utils.book_new();
+            let wsData = [
+                ["HÓA ĐƠN GIÁ TRỊ GIA TĂNG (VAT INVOICE)"],
+                ["Đơn vị bán:", document.getElementById('seller-name').value],
+                ["Mã số thuế:", document.getElementById('seller-tax').value],
+                ["Đơn vị mua:", document.getElementById('buyer-company').value],
+                ["Số hóa đơn:", document.getElementById('inv-number').value, "Ký hiệu:", document.getElementById('inv-serial').value],
+                [],
+                ["STT", "Tên hàng hóa, dịch vụ", "Đơn vị tính", "Số lượng", "Đơn giá", "Thành tiền"]
+            ];
+
+            let totalGoods = 0;
+            items.forEach((item, index) => {
+                const amount = (item.qty || 0) * (item.price || 0);
+                totalGoods += amount;
+                wsData.push([index + 1, item.name, item.unit, item.qty, item.price, amount]);
+            });
+
+            wsData.push([]);
+            wsData.push(["Cộng tiền hàng:", "", "", "", "", totalGoods]);
+            
+            const vatRateVal = document.getElementById('inv-vat-rate').value;
+            let vatAmount = 0;
+            if (vatRateVal !== 'KCT' && vatRateVal !== 'KKKNT') {
+                vatAmount = totalGoods * (parseFloat(vatRateVal) / 100);
+            }
+            wsData.push(["Tiền thuế GTGT (" + vatRateVal + "):", "", "", "", "", vatAmount]);
+            wsData.push(["Tổng cộng thanh toán:", "", "", "", "", totalGoods + vatAmount]);
+
+            let ws = XLSX.utils.aoa_to_sheet(wsData);
+            XLSX.utils.book_append_sheet(wb, ws, "HoaDon");
+            XLSX.writeFile(wb, `HoaDon_${document.getElementById('inv-number').value}.xlsx`);
+        }
+
+        window.onload = function() {
+            loadSampleData();
+        };
+    </script>
+</body>
+</html>
